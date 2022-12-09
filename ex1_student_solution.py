@@ -120,6 +120,19 @@ class Solution:
         """
         # return fit_percent, dist_mse
         """INSERT YOUR CODE HERE"""
+        match_p_src = np.array([[list(pt[:]) for pt in match_p_src.T]], dtype='float32')
+        match_p_dst = np.array([[list(pt[:]) for pt in match_p_dst.T]], dtype='float32')
+        forward_map = cv2.perspectiveTransform(match_p_src, homography.astype('float32'))  # transformation of the coordinates
+
+        diff_vec = forward_map[0] - match_p_dst[0]
+        distance_mapped_dst = np.sqrt(np.power(diff_vec[:, 0], 2) + np.power(diff_vec[:, 1], 2))
+        # fit_percent is the probability that a point will considered as inlier (distance<err)
+        fit_percent = np.sum(distance_mapped_dst < max_err) / match_p_src.shape[1]
+        inlier_dist = distance_mapped_dst[distance_mapped_dst < max_err]  # the distances of the inlier points
+        # dist_mse is the MSE of the distances of the inliers (the mean squared error between the mapped to the dst)
+        dist_mse = np.mean(np.power(inlier_dist, 2))
+
+        return (fit_percent, dist_mse)
         pass
 
     @staticmethod
@@ -149,6 +162,20 @@ class Solution:
         """
         # return mp_src_meets_model, mp_dst_meets_model
         """INSERT YOUR CODE HERE"""
+        Points = np.vstack(
+            [match_p_src, np.ones((1, match_p_src.shape[1]))]
+        )
+
+        mapped_src = np.matmul(homography, Points)
+        mapped_src = mapped_src / mapped_src[-1, :]
+        mapped_src = mapped_src[:-1, :]
+
+        dists = (mapped_src[1, :] - match_p_dst[1, :]) ** 2 + (mapped_src[0, :] - match_p_dst[0, :]) ** 2
+        dists = np.sqrt(dists)
+
+        inliers = dists <= max_err
+
+        return match_p_src[inliers] , match_p_dst[inliers]
         pass
 
     def compute_homography(self,
@@ -183,6 +210,49 @@ class Solution:
         # k = int(np.ceil(np.log(1 - p) / np.log(1 - w ** n))) + 1
         # return homography
         """INSERT YOUR CODE HERE"""
+        w = inliers_percent
+        p = 0.999
+        n = 6  # match_p_src.shape[1]
+
+        k = np.ceil(np.log(1 - p) / np.log(1 - w ** n)).astype(int)
+
+        best_H = np.zeros((3, 3))
+        best_mse = np.inf
+
+        for i in range(k):
+
+            # step 1 - draw a minimal random set of numbers.
+            random_indxs = np.random.permutation(np.arange(match_p_src.shape[1]))[:n]
+
+            # step 2 - fit model based on minimal number of points
+            H = compute_homography_naive(
+                match_p_src[:, random_indxs],
+                match_p_dst[:, random_indxs]
+            )
+
+            # step 3 - decide if all other points are inliers/outliers
+            fit_percent, mse = test_homography(H, match_p_src, match_p_dst, max_err)
+
+            # step 4 - if the number of inliers is greater than d
+            if fit_percent >= inliers_percent:
+                inliers_mask = get_inliers(H, match_p_src, match_p_dst, max_err)
+
+                # recompute model based on all inliers
+                all_inliers_src = match_p_src[:, inliers_mask]
+                all_inliers_dst = match_p_dst[:, inliers_mask]
+
+                temp_H = compute_homography_naive(
+                    all_inliers_src,
+                    all_inliers_dst
+                )
+
+                fit_percent, mse = test_homography(H, match_p_src, match_p_dst, max_err)
+
+                if mse <= best_mse:
+                    best_mse = mse
+                    best_H = temp_H
+
+        return best_H
         pass
 
     @staticmethod
