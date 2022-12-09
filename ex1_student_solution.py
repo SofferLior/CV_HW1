@@ -31,9 +31,26 @@ class Solution:
         Returns:
             Homography from source to destination, 3x3 numpy array.
         """
-        # return homography
-        """INSERT YOUR CODE HERE"""
-        pass
+
+        num_of_points = match_p_dst.shape[1]
+        if num_of_points != match_p_src.shape[1]:
+            print ("Issue with points' array size")
+            return None
+        A = np.zeros((2*num_of_points, 9))
+        for match in range(num_of_points):
+            x = match_p_src[0][match]
+            y = match_p_src[1][match]
+            x_bar = match_p_dst[0][match]
+            y_bar = match_p_dst[1][match]
+            A[match*2] = [x, y, 1, 0, 0, 0, -x_bar*x, -x_bar*y, -x_bar]
+            A[match*2+1] = [0, 0, 0, x, y, 1, -y_bar*x, -y_bar*y, -y_bar]
+
+        # perform SVD
+        u, s, vh = np.linalg.svd(A)
+        v = vh.T
+        homography_vector = v[:, -1] # get the e.v with the smallest lambda
+        homography = homography_vector.reshape((3, 3))
+        return homography
 
     @staticmethod
     def compute_forward_homography_slow(
@@ -58,9 +75,17 @@ class Solution:
         Returns:
             The forward homography of the source image to its destination.
         """
-        # return new_image
-        """INSERT YOUR CODE HERE"""
-        pass
+        new_image = np.zeros(dst_image_shape, dtype='uint8')
+        for i in range(src_image.shape[0]):
+            for j in range(src_image.shape[1]):
+                new_pixel_coord = np.matmul(homography, [j, i, 1])
+                new_pixel_coord_norm = new_pixel_coord/new_pixel_coord[-1]
+                new_i = int(new_pixel_coord_norm[1])
+                new_j = int(new_pixel_coord_norm[0])
+                if 0 <= new_i < dst_image_shape[0] and 0 <= new_j < dst_image_shape[1]:
+                    new_image[new_i, new_j] = src_image[i, j]
+        return new_image
+
 
     @staticmethod
     def compute_forward_homography_fast(
@@ -89,9 +114,16 @@ class Solution:
         Returns:
             The forward homography of the source image to its destination.
         """
-        # return new_image
-        """INSERT YOUR CODE HERE"""
-        pass
+        rows_idx = np.arange(0,dst_image_shape[0],1)
+        cols_idx = np.arange(0, dst_image_shape[1], 1)
+        new_image_rows, new_image_cols = np.meshgrid(rows_idx, cols_idx)
+        src_image_homo_coord = np.ones((3, new_image_rows.size))
+        src_image_homo_coord[0,:] = new_image_rows.flatten()
+        src_image_homo_coord[1, :] = new_image_cols.flatten()
+        new_image_home_coord = np.matmul(homography, src_image_homo_coord)
+        # TODO: complete
+        new_image = None
+        return new_image
 
     @staticmethod
     def test_homography(homography: np.ndarray,
