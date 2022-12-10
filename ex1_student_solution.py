@@ -114,15 +114,27 @@ class Solution:
         Returns:
             The forward homography of the source image to its destination.
         """
-        rows_idx = np.arange(0,dst_image_shape[0],1)
-        cols_idx = np.arange(0, dst_image_shape[1], 1)
+        # (1) create meshgrid
+        rows_idx = np.arange(0,src_image.shape[0],1)
+        cols_idx = np.arange(0, src_image.shape[1], 1)
         new_image_rows, new_image_cols = np.meshgrid(rows_idx, cols_idx)
+        # (2) Generate matrix with the coordinates
         src_image_homo_coord = np.ones((3, new_image_rows.size))
-        src_image_homo_coord[0,:] = new_image_rows.flatten()
-        src_image_homo_coord[1, :] = new_image_cols.flatten()
+        src_image_homo_coord[1, :] = new_image_rows.flatten()
+        src_image_homo_coord[0, :] = new_image_cols.flatten()
+        # (3) Transform & norm
         new_image_home_coord = np.matmul(homography, src_image_homo_coord)
-        # TODO: complete
-        new_image = None
+        new_image_home_coord[0] = new_image_home_coord[0]/new_image_home_coord[2]
+        new_image_home_coord[1] = new_image_home_coord[1] / new_image_home_coord[2]
+        # (4) convert to int and create a mask
+        new_image_home_coord = new_image_home_coord.astype('int')
+        src_image_homo_coord = src_image_homo_coord.astype('int')
+        cols_mask = np.ma.masked_inside(new_image_home_coord[0], 0, dst_image_shape[1]-1)
+        rows_mask = np.ma.masked_inside(new_image_home_coord[1], 0, dst_image_shape[0]-1)
+        coord_mask = rows_mask.mask & cols_mask.mask
+        # (5) Plant the pixels
+        new_image = np.zeros(dst_image_shape, dtype='uint8')
+        new_image[new_image_home_coord[1][coord_mask], new_image_home_coord[0][coord_mask]] = src_image[src_image_homo_coord[1][coord_mask],src_image_homo_coord[0][coord_mask]]
         return new_image
 
     @staticmethod
