@@ -169,15 +169,15 @@ class Solution:
         forward_map = np.matmul(homography, match_p_src_homo)
         forward_map[0] = forward_map[0] / forward_map[2]
         forward_map[1] = forward_map[1] / forward_map[2]
-        forward_map = forward_map.astype(int)
+        forward_map = forward_map[0:2].T.astype(int)
 
-        diff_vec = forward_map.T[:,:2]-match_p_dst
+        diff_vec = forward_map-match_p_dst
         distance_mapped_dst = np.sqrt(np.power(diff_vec[:, 0], 2) + np.power(diff_vec[:, 1], 2))
         # fit_percent is the probability that a point will be considered as inlier (distance<err)
-        fit_percent = np.sum(distance_mapped_dst < max_err) / match_p_src.shape[1]
-        inlier_dist = distance_mapped_dst[distance_mapped_dst < max_err]  # the distances of the inlier points
+        fit_percent = np.sum(distance_mapped_dst <= max_err) / match_p_src.shape[0]
+        inlier_dist = distance_mapped_dst[distance_mapped_dst <= max_err]  # the distances of the inlier points
         # dist_mse is the MSE of the distances of the inliers (the mean squared error between the mapped to the dst)
-        dist_mse = np.mean(np.power(inlier_dist, 2))
+        dist_mse = np.mean(inlier_dist)
 
         return fit_percent, dist_mse
 
