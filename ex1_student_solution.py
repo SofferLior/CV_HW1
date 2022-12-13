@@ -251,8 +251,8 @@ class Solution:
         # return homography
 
         w = inliers_percent
-        p = 0.999
-        n = 6  # match_p_src.shape[1]
+        p = 0.99
+        n = 4
 
         k = np.ceil(np.log(1 - p) / np.log(1 - w ** n)).astype(int)
 
@@ -315,10 +315,33 @@ class Solution:
         Returns:
             The source image backward warped to the destination coordinates.
         """
+        # (1) create meshgrid of dst image
+        rows_idx = np.arange(0,dst_image_shape[0],1)
+        cols_idx = np.arange(0, dst_image_shape[1], 1)
+        new_dst_image_rows, new_dst_image_cols = np.meshgrid(rows_idx, cols_idx)
+        # (2) Generate matrix with the coordinates
+        dst_image_homo_coord = np.ones((3, new_dst_image_rows.size))
+        dst_image_homo_coord[1, :] = new_dst_image_rows.flatten()
+        dst_image_homo_coord[0, :] = new_dst_image_cols.flatten()
+        # (3) Transform & norm
+        new_image_home_coord = np.matmul(backward_projective_homography, dst_image_homo_coord)
+        new_image_home_coord[0] = new_image_home_coord[0]/new_image_home_coord[2]
+        new_image_home_coord[1] = new_image_home_coord[1] / new_image_home_coord[2]
+        new_image_home_coord = new_image_home_coord.astype('int')
 
-        # return backward_warp
-        """INSERT YOUR CODE HERE"""
-        pass
+        # (4) create meshgrid of src image
+        rows_idx = np.arange(0,src_image.shape[0],1)
+        cols_idx = np.arange(0, src_image.shape[1], 1)
+        new_src_image_rows, new_src_image_cols = np.meshgrid(rows_idx, cols_idx)
+
+        # (5)
+        backward_warp = np.zeros(dst_image_shape, dtype='uint8')
+        for color in range(src_image.shape[2]):
+            # TODO: this function below is not working!!
+            temp = griddata((new_src_image_rows.flatten(), new_src_image_cols.flatten()), src_image[:, :, color].flatten(),
+                     (new_image_home_coord[0], new_image_home_coord[1]), method='cubic')
+            backward_warp[:,:,color] = temp.reshape((dst_image_shape[0],dst_image_shape[1]))
+        return backward_warp
 
     @staticmethod
     def find_panorama_shape(src_image: np.ndarray,
