@@ -315,32 +315,37 @@ class Solution:
         Returns:
             The source image backward warped to the destination coordinates.
         """
-        # (1) create meshgrid of dst image
-        rows_idx = np.arange(0,dst_image_shape[0],1)
-        cols_idx = np.arange(0, dst_image_shape[1], 1)
-        new_dst_image_rows, new_dst_image_cols = np.meshgrid(rows_idx, cols_idx)
+
+        rows_idx = np.linspace(0,dst_image_shape[0]-1, dst_image_shape[0]) #np.arange(0,dst_image_shape[0],1)
+        cols_idx = np.linspace(0,dst_image_shape[1]-1, dst_image_shape[1]) #np.arange(0, dst_image_shape[1], 1)
+        dst_image_rows, dst_image_cols = np.meshgrid(cols_idx, rows_idx)
         # (2) Generate matrix with the coordinates
-        dst_image_homo_coord = np.ones((3, new_dst_image_rows.size))
-        dst_image_homo_coord[1, :] = new_dst_image_rows.flatten()
-        dst_image_homo_coord[0, :] = new_dst_image_cols.flatten()
+        dst_image_homo_coord = np.ones((3, dst_image_rows.size))
+        dst_image_homo_coord[0, :] = dst_image_rows.flatten()
+        dst_image_homo_coord[1, :] = dst_image_cols.flatten()
         # (3) Transform & norm
-        new_image_home_coord = np.matmul(backward_projective_homography, dst_image_homo_coord)
-        new_image_home_coord[0] = new_image_home_coord[0]/new_image_home_coord[2]
-        new_image_home_coord[1] = new_image_home_coord[1] / new_image_home_coord[2]
-        new_image_home_coord = new_image_home_coord.astype('int')
+        new_src_image_home_coord = np.matmul(backward_projective_homography, dst_image_homo_coord)
+        new_src_image_home_coord[0] = new_src_image_home_coord[0]/new_src_image_home_coord[2]
+        new_src_image_home_coord[1] = new_src_image_home_coord[1] / new_src_image_home_coord[2]
+        new_src_image_home_coord = new_src_image_home_coord.astype('int')
 
         # (4) create meshgrid of src image
-        rows_idx = np.arange(0,src_image.shape[0],1)
-        cols_idx = np.arange(0, src_image.shape[1], 1)
-        new_src_image_rows, new_src_image_cols = np.meshgrid(rows_idx, cols_idx)
+        cols_mask = np.ma.masked_inside(new_src_image_home_coord[0], 0, src_image.shape[
+            1]-1)
+        rows_mask = np.ma.masked_inside(new_src_image_home_coord[1], 0, src_image.shape[0]-1)
+        coord_mask = rows_mask.mask & cols_mask.mask
 
-        # (5)
+
+        src_image_backward_flatten = np.zeros((dst_image_cols.size,3))
+        src_image_backward_flatten[coord_mask] = src_image[new_src_image_home_coord[1][coord_mask], new_src_image_home_coord[0][coord_mask]]
+
+        src_image_mesh = (new_src_image_home_coord[1][coord_mask], new_src_image_home_coord[0][coord_mask])
         backward_warp = np.zeros(dst_image_shape, dtype='uint8')
+        # (5)
         for color in range(src_image.shape[2]):
-            # TODO: this function below is not working!!
-            temp = griddata((new_src_image_rows.flatten(), new_src_image_cols.flatten()), src_image[:, :, color].flatten(),
-                     (new_image_home_coord[0], new_image_home_coord[1]), method='cubic')
-            backward_warp[:,:,color] = temp.reshape((dst_image_shape[0],dst_image_shape[1]))
+            temp = griddata(src_image_mesh, src_image_backward_flatten[:,color][coord_mask] ,(new_src_image_home_coord[1],new_src_image_home_coord[0]), method='cubic')
+            backward_warp[:,:,color] = temp.reshape((dst_image_shape[0],dst_image_shape[1])).astype(np.uint8)
+
         return backward_warp
 
     @staticmethod
