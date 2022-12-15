@@ -12,6 +12,29 @@ from scipy.interpolate import griddata
 
 PadStruct = namedtuple('PadStruct',
                        ['pad_up', 'pad_down', 'pad_right', 'pad_left'])
+DEBUG = True
+if DEBUG == True:
+    import scipy
+    import matplotlib.pyplot as plt
+    import matplotlib.image as mpimg
+
+    def load_data(is_perfect_matches=True):
+        # Read the data:
+        src_img = mpimg.imread('src.jpg')
+        dst_img = mpimg.imread('dst.jpg')
+        if is_perfect_matches:
+            # loading perfect matches
+            matches = scipy.io.loadmat('matches_perfect')
+        else:
+            # matching points and some outliers
+            matches = scipy.io.loadmat('matches')
+        match_p_dst = matches['match_p_dst'].astype(float)
+        match_p_src = matches['match_p_src'].astype(float)
+        return src_img, dst_img, match_p_src, match_p_dst
+
+
+    src_img, dst_img, match_p_src, match_p_dst = load_data()
+
 
 
 class Solution:
@@ -315,6 +338,7 @@ class Solution:
         Returns:
             The source image backward warped to the destination coordinates.
         """
+
         # (1) create meshgrid of dst image
         rows_idx = np.arange(0,dst_image_shape[0],1)
         cols_idx = np.arange(0, dst_image_shape[1], 1)
@@ -476,4 +500,15 @@ class Solution:
         """
         # return np.clip(img_panorama, 0, 255).astype(np.uint8)
         """INSERT YOUR CODE HERE"""
+        H = self.compute_homography(match_p_src, match_p_dst, inliers_percent, max_err)
+
         pass
+
+if __name__ == '__main__':
+    Solution.compute_homography_naive
+    Solution.compute_backward_mapping(
+            backward_projective_homography = Solution.compute_homography_naive(match_p_src,
+                                                                               match_p_dst),
+            src_image=src_img,
+            dst_image_shape=(1088, 1452, 3))
+
