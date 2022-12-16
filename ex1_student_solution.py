@@ -73,7 +73,7 @@ class Solution:
         v = vh.T
         homography_vector = v[:, -1] # get the e.v with the smallest lambda
         homography = homography_vector.reshape((3, 3))
-        return homography
+        return homography/homography[2,2]
 
     @staticmethod
     def compute_forward_homography_slow(
