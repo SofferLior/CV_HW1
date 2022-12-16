@@ -57,9 +57,9 @@ class Solution:
 
         num_of_points = match_p_dst.shape[1]
         if num_of_points != match_p_src.shape[1]:
-            print ("Issue with points' array size")
+            print("Issue with points' array size")
             return None
-        A = np.zeros((2*num_of_points, 9))
+        A = np.zeros((2 * num_of_points, 9))
         for match in range(num_of_points):
             x = match_p_src[0][match]
             y = match_p_src[1][match]
@@ -71,7 +71,7 @@ class Solution:
         # perform SVD
         u, s, vh = np.linalg.svd(A)
         v = vh.T
-        homography_vector = v[:, -1] # get the e.v with the smallest lambda
+        homography_vector = v[:, -1]  # get the e.v with the smallest lambda
         homography = homography_vector.reshape((3, 3))
         return homography/homography[2,2]
 
@@ -502,11 +502,30 @@ class Solution:
             A panorama image.
 
         """
-        # return np.clip(img_panorama, 0, 255).astype(np.uint8)
-        """INSERT YOUR CODE HERE"""
-        H = self.compute_homography(match_p_src, match_p_dst, inliers_percent, max_err)
+        # (1) forward homographyy
+        homography = self.compute_homography(match_p_src, match_p_dst, inliers_percent, max_err)
+        (pan_n_rows, pan_n_cols, pads) = self.find_panorama_shape(src_image, dst_image, homography)
 
-        pass
+        # (2) backward homography
+        back_homography_matrix = self.compute_homography(match_p_dst, match_p_src, inliers_percent, max_err)
+        # (3) add translation
+        back_homography_matrix_with_translation = self.add_translation_to_backward_homography(back_homography_matrix, pads.pad_left, pads.pad_up)
+        # (4) backward mapping
+        src_image_wrap = self.compute_backward_mapping(back_homography_matrix_with_translation, src_image, (pan_n_rows,pan_n_cols,3))
+
+        # (5) panorama with dst
+        img_panorama = np.zeros((pan_n_rows, pan_n_cols, 3),dtype=np.uint8)
+        img_panorama[pads.pad_up:pads.pad_up+dst_image.shape[0],pan_n_cols-pads.pad_right-dst_image.shape[1]: pan_n_cols-pads.pad_right,:] = dst_image[:,:,:]
+
+        # (6) place the backward warped image
+        for i in range(src_image_wrap.shape[0]):
+            for j in range(src_image_wrap.shape[1]):
+                if not img_panorama[i,j].any():
+                    img_panorama[i, j] = src_image_wrap[i,j]
+
+        return np.clip(img_panorama, 0, 255).astype(np.uint8)
+
+
 
 if __name__ == '__main__':
     Solution.compute_homography_naive
