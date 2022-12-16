@@ -275,7 +275,7 @@ class Solution:
             fit_percent, mse = self.test_homography(H, match_p_src, match_p_dst, max_err)
 
             # step 4 - if the number of inliers is greater than d
-            if fit_percent >= inliers_percent:
+            if fit_percent >= w:
                 all_inliers_src, all_inliers_dst = self.meet_the_model_points(H, match_p_src, match_p_dst, max_err)
 
                 temp_H = self.compute_homography_naive(
@@ -283,7 +283,7 @@ class Solution:
                     all_inliers_dst
                 )
 
-                fit_percent, mse = self.test_homography(H, match_p_src, match_p_dst, max_err)
+                fit_percent, mse = self.test_homography(temp_H, all_inliers_src, all_inliers_dst, max_err)
 
                 if mse <= best_mse:
                     best_mse = mse
