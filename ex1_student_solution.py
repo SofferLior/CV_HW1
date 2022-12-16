@@ -50,6 +50,7 @@ class Solution:
         v = vh.T
         homography_vector = v[:, -1]  # get the e.v with the smallest lambda
         homography = homography_vector.reshape((3, 3))
+        homography = homography/homography[2, 2]
         return homography
 
     @staticmethod
@@ -254,6 +255,7 @@ class Solution:
         w = inliers_percent
         p = 0.99
         n = 4
+        d = 0.5
 
         k = np.ceil(np.log(1 - p) / np.log(1 - w ** n)).astype(int)
 
@@ -261,27 +263,14 @@ class Solution:
         best_mse = np.inf
 
         for i in range(k):
-
-            # step 1 - draw a minimal random set of numbers.
             random_indxs = np.random.permutation(np.arange(match_p_src.shape[1]))[:n]
 
-            # step 2 - fit model based on minimal number of points
-            H = self.compute_homography_naive(
-                match_p_src[:, random_indxs],
-                match_p_dst[:, random_indxs]
-            )
+            H = self.compute_homography_naive(match_p_src[:, random_indxs], match_p_dst[:, random_indxs])
 
-            # step 3 - decide if all other points are inliers/outliers
-            fit_percent, mse = self.test_homography(H, match_p_src, match_p_dst, max_err)
+            all_inliers_src, all_inliers_dst = self.meet_the_model_points(H, match_p_src, match_p_dst, max_err)
 
-            # step 4 - if the number of inliers is greater than d
-            if fit_percent >= w:
-                all_inliers_src, all_inliers_dst = self.meet_the_model_points(H, match_p_src, match_p_dst, max_err)
-
-                temp_H = self.compute_homography_naive(
-                    all_inliers_src,
-                    all_inliers_dst
-                )
+            if all_inliers_src.shape[1] > d * match_p_src.shape[1]:
+                temp_H = self.compute_homography_naive(all_inliers_src, all_inliers_dst)
 
                 fit_percent, mse = self.test_homography(temp_H, all_inliers_src, all_inliers_dst, max_err)
 
