@@ -12,29 +12,6 @@ from scipy.interpolate import griddata
 
 PadStruct = namedtuple('PadStruct',
                        ['pad_up', 'pad_down', 'pad_right', 'pad_left'])
-DEBUG = True
-if DEBUG == True:
-    import scipy
-    import matplotlib.pyplot as plt
-    import matplotlib.image as mpimg
-
-    def load_data(is_perfect_matches=True):
-        # Read the data:
-        src_img = mpimg.imread('src.jpg')
-        dst_img = mpimg.imread('dst.jpg')
-        if is_perfect_matches:
-            # loading perfect matches
-            matches = scipy.io.loadmat('matches_perfect')
-        else:
-            # matching points and some outliers
-            matches = scipy.io.loadmat('matches')
-        match_p_dst = matches['match_p_dst'].astype(float)
-        match_p_src = matches['match_p_src'].astype(float)
-        return src_img, dst_img, match_p_src, match_p_dst
-
-
-    src_img, dst_img, match_p_src, match_p_dst = load_data()
-
 
 
 class Solution:
@@ -73,7 +50,8 @@ class Solution:
         v = vh.T
         homography_vector = v[:, -1]  # get the e.v with the smallest lambda
         homography = homography_vector.reshape((3, 3))
-        return homography/homography[2,2]
+        homography = homography/homography[2, 2]
+        return homography
 
     @staticmethod
     def compute_forward_homography_slow(
@@ -138,7 +116,7 @@ class Solution:
             The forward homography of the source image to its destination.
         """
         # (1) create meshgrid
-        rows_idx = np.arange(0,src_image.shape[0],1)
+        rows_idx = np.arange(0, src_image.shape[0], 1)
         cols_idx = np.arange(0, src_image.shape[1], 1)
         new_image_rows, new_image_cols = np.meshgrid(rows_idx, cols_idx)
         # (2) Generate matrix with the coordinates
@@ -147,17 +125,18 @@ class Solution:
         src_image_homo_coord[0, :] = new_image_cols.flatten()
         # (3) Transform & norm
         new_image_home_coord = np.matmul(homography, src_image_homo_coord)
-        new_image_home_coord[0] = new_image_home_coord[0]/new_image_home_coord[2]
+        new_image_home_coord[0] = new_image_home_coord[0] / new_image_home_coord[2]
         new_image_home_coord[1] = new_image_home_coord[1] / new_image_home_coord[2]
         # (4) convert to int and create a mask
         new_image_home_coord = new_image_home_coord.astype('int')
         src_image_homo_coord = src_image_homo_coord.astype('int')
-        cols_mask = np.ma.masked_inside(new_image_home_coord[0], 0, dst_image_shape[1]-1)
-        rows_mask = np.ma.masked_inside(new_image_home_coord[1], 0, dst_image_shape[0]-1)
+        cols_mask = np.ma.masked_inside(new_image_home_coord[0], 0, dst_image_shape[1] - 1)
+        rows_mask = np.ma.masked_inside(new_image_home_coord[1], 0, dst_image_shape[0] - 1)
         coord_mask = rows_mask.mask & cols_mask.mask
         # (5) Plant the pixels
         new_image = np.zeros(dst_image_shape, dtype='uint8')
-        new_image[new_image_home_coord[1][coord_mask], new_image_home_coord[0][coord_mask]] = src_image[src_image_homo_coord[1][coord_mask],src_image_homo_coord[0][coord_mask]]
+        new_image[new_image_home_coord[1][coord_mask], new_image_home_coord[0][coord_mask]] = src_image[
+            src_image_homo_coord[1][coord_mask], src_image_homo_coord[0][coord_mask]]
         return new_image
 
     @staticmethod
@@ -194,7 +173,7 @@ class Solution:
         forward_map[1] = forward_map[1] / forward_map[2]
         forward_map = forward_map[0:2].T.astype(int)
 
-        diff_vec = forward_map-match_p_dst
+        diff_vec = forward_map - match_p_dst
         distance_mapped_dst = np.sqrt(np.power(diff_vec[:, 0], 2) + np.power(diff_vec[:, 1], 2))
         # fit_percent is the probability that a point will be considered as inlier (distance<err)
         fit_percent = np.sum(distance_mapped_dst <= max_err) / match_p_src.shape[0]
@@ -239,7 +218,7 @@ class Solution:
 
         inliers = dists <= max_err
 
-        return match_p_src[:,inliers], match_p_dst[:,inliers]
+        return match_p_src[:, inliers], match_p_dst[:, inliers]
 
     def compute_homography(self,
                            match_p_src: np.ndarray,
@@ -276,6 +255,7 @@ class Solution:
         w = inliers_percent
         p = 0.99
         n = 4
+        d = 0.5
 
         k = np.ceil(np.log(1 - p) / np.log(1 - w ** n)).astype(int)
 
@@ -283,29 +263,16 @@ class Solution:
         best_mse = np.inf
 
         for i in range(k):
-
-            # step 1 - draw a minimal random set of numbers.
             random_indxs = np.random.permutation(np.arange(match_p_src.shape[1]))[:n]
 
-            # step 2 - fit model based on minimal number of points
-            H = self.compute_homography_naive(
-                match_p_src[:, random_indxs],
-                match_p_dst[:, random_indxs]
-            )
+            H = self.compute_homography_naive(match_p_src[:, random_indxs], match_p_dst[:, random_indxs])
 
-            # step 3 - decide if all other points are inliers/outliers
-            fit_percent, mse = self.test_homography(H, match_p_src, match_p_dst, max_err)
+            all_inliers_src, all_inliers_dst = self.meet_the_model_points(H, match_p_src, match_p_dst, max_err)
 
-            # step 4 - if the number of inliers is greater than d
-            if fit_percent >= inliers_percent:
-                all_inliers_src, all_inliers_dst = self.meet_the_model_points(H, match_p_src, match_p_dst, max_err)
+            if all_inliers_src.shape[1] > d * match_p_src.shape[1]:
+                temp_H = self.compute_homography_naive(all_inliers_src, all_inliers_dst)
 
-                temp_H = self.compute_homography_naive(
-                    all_inliers_src,
-                    all_inliers_dst
-                )
-
-                fit_percent, mse = self.test_homography(H, match_p_src, match_p_dst, max_err)
+                fit_percent, mse = self.test_homography(temp_H, all_inliers_src, all_inliers_dst, max_err)
 
                 if mse <= best_mse:
                     best_mse = mse
@@ -339,35 +306,30 @@ class Solution:
             The source image backward warped to the destination coordinates.
         """
 
-        rows_idx = np.linspace(0,dst_image_shape[0]-1, dst_image_shape[0]) #np.arange(0,dst_image_shape[0],1)
-        cols_idx = np.linspace(0,dst_image_shape[1]-1, dst_image_shape[1]) #np.arange(0, dst_image_shape[1], 1)
-        dst_image_rows, dst_image_cols = np.meshgrid(cols_idx, rows_idx)
+        rows_idx = np.arange(0, dst_image_shape[0], 1)
+        cols_idx = np.arange(0, dst_image_shape[1], 1)
+        dst_x, dst_y = np.meshgrid(cols_idx, rows_idx)
         # (2) Generate matrix with the coordinates
-        dst_image_homo_coord = np.ones((3, dst_image_rows.size))
-        dst_image_homo_coord[0, :] = dst_image_rows.flatten()
-        dst_image_homo_coord[1, :] = dst_image_cols.flatten()
+        dst_image_homo_coord = np.ones((3, dst_x.size))
+        dst_image_homo_coord[0, :] = dst_x.flatten()
+        dst_image_homo_coord[1, :] = dst_y.flatten()
         # (3) Transform & norm
         new_src_image_home_coord = np.matmul(backward_projective_homography, dst_image_homo_coord)
-        new_src_image_home_coord[0] = new_src_image_home_coord[0]/new_src_image_home_coord[2]
+        new_src_image_home_coord[0] = new_src_image_home_coord[0] / new_src_image_home_coord[2]
         new_src_image_home_coord[1] = new_src_image_home_coord[1] / new_src_image_home_coord[2]
         new_src_image_home_coord = new_src_image_home_coord.astype('int')
 
         # (4) create meshgrid of src image
-        cols_mask = np.ma.masked_inside(new_src_image_home_coord[0], 0, src_image.shape[
-            1]-1)
-        rows_mask = np.ma.masked_inside(new_src_image_home_coord[1], 0, src_image.shape[0]-1)
-        coord_mask = rows_mask.mask & cols_mask.mask
+        src_rows_idx = np.arange(0, src_image.shape[0], 1)
+        src_cols_idx = np.arange(0, src_image.shape[1], 1)
+        src_x, src_y = np.meshgrid(src_cols_idx, src_rows_idx)
 
-
-        src_image_backward_flatten = np.zeros((dst_image_cols.size,3))
-        src_image_backward_flatten[coord_mask] = src_image[new_src_image_home_coord[1][coord_mask], new_src_image_home_coord[0][coord_mask]]
-
-        src_image_mesh = (new_src_image_home_coord[1][coord_mask], new_src_image_home_coord[0][coord_mask])
-        backward_warp = np.zeros(dst_image_shape, dtype='uint8')
         # (5)
+        backward_warp = np.zeros(dst_image_shape, dtype='uint8')
         for color in range(src_image.shape[2]):
-            temp = griddata(src_image_mesh, src_image_backward_flatten[:,color][coord_mask] ,(new_src_image_home_coord[1],new_src_image_home_coord[0]), method='cubic')
-            backward_warp[:,:,color] = temp.reshape((dst_image_shape[0],dst_image_shape[1])).astype(np.uint8)
+            temp = griddata((src_x.flatten(), src_y.flatten()), src_image[:, :, color].flatten(),
+                            (new_src_image_home_coord[0], new_src_image_home_coord[1]), method='cubic')
+            backward_warp[:, :, color] = temp.reshape((dst_image_shape[0], dst_image_shape[1])).astype(np.uint8)
 
         return backward_warp
 
@@ -459,9 +421,12 @@ class Solution:
             A new homography which includes the backward homography and the
             translation.
         """
-        # return final_homography
-        """INSERT YOUR CODE HERE"""
-        pass
+        translation_mat = np.identity(3)
+        translation_mat[0,2] = -pad_left
+        translation_mat[1,2] = -pad_up
+        final_homography = np.matmul(backward_homography,translation_mat)
+        final_homography = final_homography/final_homography[2,2]
+        return final_homography
 
     def panorama(self,
                  src_image: np.ndarray,
@@ -525,13 +490,4 @@ class Solution:
 
         return np.clip(img_panorama, 0, 255).astype(np.uint8)
 
-
-
-if __name__ == '__main__':
-    Solution.compute_homography_naive
-    Solution.compute_backward_mapping(
-            backward_projective_homography = Solution.compute_homography_naive(match_p_src,
-                                                                               match_p_dst),
-            src_image=src_img,
-            dst_image_shape=(1088, 1452, 3))
 
