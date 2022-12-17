@@ -259,7 +259,7 @@ class Solution:
 
         k = np.ceil(np.log(1 - p) / np.log(1 - w ** n)).astype(int)
 
-        best_H = np.zeros((3, 3))
+        best_H = self.compute_homography_naive(match_p_src, match_p_dst)  # np.zeros((3, 3))
         best_mse = np.inf
 
         for i in range(k):
@@ -327,10 +327,8 @@ class Solution:
         # (5)
         backward_warp = np.zeros(dst_image_shape, dtype='uint8')
         for color in range(src_image.shape[2]):
-            temp = griddata((src_x.flatten(), src_y.flatten()), src_image[:, :, color].flatten(),
-                            (new_src_image_home_coord[0], new_src_image_home_coord[1]), method='cubic')
+            temp = griddata((src_x.flatten(), src_y.flatten()), src_image[:, :, color].flatten(), (new_src_image_home_coord[0], new_src_image_home_coord[1]), method='cubic')
             backward_warp[:, :, color] = temp.reshape((dst_image_shape[0], dst_image_shape[1])).astype(np.uint8)
-
         return backward_warp
 
     @staticmethod
